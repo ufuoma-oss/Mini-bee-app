@@ -1,58 +1,54 @@
-# Git and IDE
+# Git
 .git
 .gitignore
-.idea
-.vscode
-*.md
-!README.md
 
-# Python dev and cache
+# Python
 __pycache__
 *.py[cod]
 *$py.class
-.venv
-venv
-uv.lock
-.pytest_cache
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
 .coverage
-htmlcov
-.tox
-.mypy_cache
-.ruff_cache
+htmlcov/
+.tox/
 
-# Tests (not needed in runtime image)
-tests
-test.py
-*_test.py
-pytest.ini
+# Documentation
+docs/
+*.md
+!README.md
+
+# Development files
+.editorconfig
 .pre-commit-config.yaml
-.flake8
-.eslintrc
-.stylelintrc
+Makefile
 
-# Frontend: exclude build artifacts; ship pre-built src/console/dist in image
-website
-console/node_modules
-console/dist
-console/.vite
-node_modules
-**/node_modules
-**/dist
-!src/copaw/console/dist
-!src/copaw/console/dist/**
-**/.vite
-
-# Example and local config (mount at runtime instead)
-example
-config.json
-jobs.json
-sessions_mount_dir
+# CoPaw working directory (not needed in image)
+.copaw/
+working/
 
 # Misc
-.env
-.env.*
-!.env.example
 .DS_Store
 *.log
-logs
-cookbook
+*.tmp

@@ -58,6 +58,7 @@ Your Personal AI Assistant; easy to install, deploy on your own machine or on th
 > - **I want to run CoPaw in 3 commands**: [Quick Start](#quick-start) → open Console in browser.
 > - **I want to chat in DingTalk / Feishu / QQ**: [Quick Start](#quick-start) → [Channels](https://copaw.agentscope.io/docs/channels).
 > - **I don’t want to install Python**: [One-line install](#one-line-install-beta-continuously-improving) handles Python automatically, or use [ModelScope one-click](https://modelscope.cn/studios/fork?target=AgentScope/CoPaw) for cloud.
+> - **I want to deploy to the cloud for free**: [Deploy on Render](#deploy-on-render)
 
 - [Quick Start](#quick-start)
 - [API Key](#api-key)
@@ -172,6 +173,22 @@ The image is built from scratch. To build the image yourself, please refer to th
 ### Using ModelScope
 
 **No local install?** [ModelScope Studio](https://modelscope.cn/studios/fork?target=AgentScope/CoPaw) one-click cloud setup. Set your Studio to **non-public** so others cannot control your CoPaw.
+
+### Deploy on Render
+
+**Deploy to the cloud for free!** Render offers a free tier perfect for CoPaw.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/agentscope-ai/CoPaw)
+
+**Quick steps:**
+1. Fork this repository to your GitHub account
+2. Click "Deploy to Render" button above or go to [Render Dashboard](https://dashboard.render.com)
+3. Create a new Web Service, connect your fork
+4. Set Dockerfile path to `./Dockerfile.render`
+5. Add environment variable: `DASHSCOPE_API_KEY` or `OPENAI_API_KEY`
+6. Add a persistent disk (recommended): mount at `/app/working`
+
+See [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) for detailed instructions.
 
 ### Deploy on Alibaba Cloud ECS
 

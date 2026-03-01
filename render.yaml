@@ -1,0 +1,112 @@
+# Render Blueprint for CoPaw Deployment
+# https://render.com/docs/blueprint-spec
+# 
+# Usage:
+# 1. Fork this repository to your GitHub account
+# 2. Go to Render Dashboard → Blueprints → New Blueprint Instance
+# 3. Connect your repository and deploy
+#
+# Make sure to set your API keys in the Render Dashboard after deployment!
+
+services:
+  # Web Service - Main CoPaw Application
+  - type: web
+    name: copaw
+    runtime: docker
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    # Plan options: starter (free), standard, pro
+    plan: starter
+    # Health check endpoint
+    healthCheckPath: /
+    # Auto-deploy on push to main branch
+    autoDeploy: true
+    # Branch to deploy
+    branch: main
+    envVars:
+      # Port is automatically set by Render (don't change this)
+      - key: PORT
+        value: 8088
+      
+      # ===== REQUIRED: Set your LLM API key =====
+      # Option 1: DashScope (Alibaba Cloud)
+      - key: DASHSCOPE_API_KEY
+        sync: false # Set manually in Render Dashboard
+      
+      # Option 2: OpenAI
+      - key: OPENAI_API_KEY
+        sync: false # Set manually in Render Dashboard
+      
+      # Option 3: Anthropic Claude
+      - key: ANTHROPIC_API_KEY
+        sync: false # Set manually in Render Dashboard
+      
+      # ===== Optional Configuration =====
+      # Enable channels (comma-separated: console,dingtalk,feishu,qq,discord)
+      - key: COPAW_ENABLED_CHANNELS
+        value: console
+      
+      # Working directory (must match disk mountPath)
+      - key: COPAW_WORKING_DIR
+        value: /app/working
+      
+      # Node environment
+      - key: NODE_ENV
+        value: production
+      
+      # Python settings
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
+      
+      # ===== Channel Configuration (Optional) =====
+      # Uncomment and set values for the channels you want to use
+      
+      # DingTalk
+      # - key: DINGTALK_CLIENT_ID
+      #   sync: false
+      # - key: DINGTALK_CLIENT_SECRET
+      #   sync: false
+      
+      # Feishu
+      # - key: FEISHU_APP_ID
+      #   sync: false
+      # - key: FEISHU_APP_SECRET
+      #   sync: false
+      
+      # QQ
+      # - key: QQ_APP_ID
+      #   sync: false
+      # - key: QQ_CLIENT_SECRET
+      #   sync: false
+      
+      # Discord
+      # - key: DISCORD_BOT_TOKEN
+      #   sync: false
+    
+    # Persistent disk for data storage (RECOMMENDED)
+    # Without this, your config and memory will be lost on each deploy
+    disk:
+      name: copaw-data
+      mountPath: /app/working
+      sizeGB: 1 # Minimum size, can be increased up to 100GB
+
+# ===== Advanced: Pre-Connected Database (Optional) =====
+# Uncomment to create a PostgreSQL database
+# databases:
+#   - name: copaw-db
+#     databaseName: copaw
+#     user: copaw
+#     plan: starter # Free tier
+
+# ===== Advanced: Redis Cache (Optional) =====
+# Uncomment to create a Redis instance
+# - type: pserv
+#   name: copaw-redis
+#   runtime: docker
+#   dockerfilePath: ./Dockerfile.redis
+#   plan: starter
+#   envVars:
+#     - key: REDIS_URL
+#       value: redis://localhost:6379
