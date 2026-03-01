@@ -45,17 +45,28 @@ async def chat(
     This is the main endpoint for the SaaS frontend to chat with the AI.
     """
     from agentscope.message import Msg
-    from agentscope_runtime.engine.schemas.agent_schemas import AgentRequest
+    from agentscope_runtime.engine.schemas.agent_schemas import (
+        AgentRequest,
+        Message,
+        TextContent,
+    )
 
     # Generate or use existing session ID
     session_id = request.session_id or str(uuid.uuid4())
 
     # Build the message using agentscope Msg (which the agent expects)
-    user_message = Msg(name="user", content=request.message, role="user")
+    user_msg = Msg(name="user", content=request.message, role="user")
+
+    # Also create a Message for AgentRequest
+    user_message = Message(
+        role="user",
+        type="message",
+        content=[TextContent(text=request.message)],
+    )
 
     # Create agent request with user_id
     agent_request = AgentRequest(
-        input=[user_message],
+        input=[user_message],  # Message for AgentRequest
         session_id=session_id,
         user_id="web_user",  # Default user for web frontend
         stream=False,
@@ -66,7 +77,7 @@ async def chat(
 
     try:
         async for msg, last in runner.query_handler(
-            msgs=[user_message],
+            msgs=[user_msg],  # Msg for agent processing
             request=agent_request,
         ):
             if msg:
@@ -100,11 +111,20 @@ async def chat_stream(
     Returns the response as a stream of text chunks.
     """
     from agentscope.message import Msg
-    from agentscope_runtime.engine.schemas.agent_schemas import AgentRequest
+    from agentscope_runtime.engine.schemas.agent_schemas import (
+        AgentRequest,
+        Message,
+        TextContent,
+    )
 
     session_id = request.session_id or str(uuid.uuid4())
 
-    user_message = Msg(name="user", content=request.message, role="user")
+    user_msg = Msg(name="user", content=request.message, role="user")
+    user_message = Message(
+        role="user",
+        type="message",
+        content=[TextContent(text=request.message)],
+    )
 
     agent_request = AgentRequest(
         input=[user_message],
@@ -116,7 +136,7 @@ async def chat_stream(
     async def generate():
         try:
             async for msg, last in runner.query_handler(
-                msgs=[user_message],
+                msgs=[user_msg],
                 request=agent_request,
             ):
                 if msg:
