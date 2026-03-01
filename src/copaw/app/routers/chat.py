@@ -60,10 +60,11 @@ async def chat(
         content=[TextContent(text=request.message)],
     )
 
-    # Create agent request
+    # Create agent request with user_id
     agent_request = AgentRequest(
         input=[user_message],
         session_id=session_id,
+        user_id="web_user",  # Default user for web frontend
         stream=False,
     )
 
@@ -118,6 +119,7 @@ async def chat_stream(
     agent_request = AgentRequest(
         input=[user_message],
         session_id=session_id,
+        user_id="web_user",  # Default user for web frontend
         stream=True,
     )
 
