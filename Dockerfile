@@ -1,21 +1,8 @@
 # -----------------------------------------------------------------------------
-# Dockerfile for Render Deployment
-# Optimized for Render.com cloud platform
+# Dockerfile for Mini Bee Backend (API Only)
+# Optimized for Render.com cloud platform - SaaS deployment
 # -----------------------------------------------------------------------------
 
-# -----------------------------------------------------------------------------
-# Stage 1: Build console frontend
-# -----------------------------------------------------------------------------
-FROM node:20-slim AS console-builder
-WORKDIR /app
-COPY console/package*.json ./console/
-RUN cd console && npm ci --include=dev
-COPY console ./console
-RUN cd console && npm run build
-
-# -----------------------------------------------------------------------------
-# Stage 2: Runtime image with Python and minimal dependencies
-# -----------------------------------------------------------------------------
 FROM python:3.12-slim-bookworm
 
 # Avoid warnings by switching to noninteractive
@@ -67,20 +54,14 @@ WORKDIR ${WORKSPACE_DIR}
 COPY pyproject.toml setup.py README.md ./
 COPY src ./src
 
-# Inject console dist from build stage
-COPY --from=console-builder /app/console/dist/ ./src/copaw/console/
-
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir .
 
-# Install Playwright browsers (optional - uncomment if needed)
-# RUN playwright install chromium --with-deps
-
 # Create working directory
 RUN mkdir -p ${COPAW_WORKING_DIR}
 
-# Initialize CoPaw with default config
+# Initialize Mini Bee with default config
 RUN copaw init --defaults --accept-security
 
 # Create start script

@@ -2,11 +2,9 @@
 # pylint: disable=redefined-outer-name,unused-argument
 import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from agentscope_runtime.engine.app import AgentApp
 
 from .runner import AgentRunner
@@ -39,8 +37,8 @@ load_envs_into_environ()
 runner = AgentRunner()
 
 agent_app = AgentApp(
-    app_name="Friday",
-    app_description="A helpful assistant",
+    app_name="MiniBee",
+    app_description="Mini Bee - Your Personal AI Assistant",
     runner=runner,
 )
 
@@ -145,44 +143,39 @@ app = FastAPI(
     openapi_url="/openapi.json" if DOCS_ENABLED else None,
 )
 
-
-# Console static dir: env, or copaw package data (console), or cwd.
-_CONSOLE_STATIC_ENV = "COPAW_CONSOLE_STATIC_DIR"
-
-
-def _resolve_console_static_dir() -> str:
-    if os.environ.get(_CONSOLE_STATIC_ENV):
-        return os.environ[_CONSOLE_STATIC_ENV]
-    # Shipped dist lives in copaw package as static data (not a Python pkg).
-    pkg_dir = Path(__file__).resolve().parent.parent
-    candidate = pkg_dir / "console"
-    if candidate.is_dir() and (candidate / "index.html").exists():
-        return str(candidate)
-    cwd = Path(os.getcwd())
-    for subdir in ("console/dist", "console_dist"):
-        candidate = cwd / subdir
-        if candidate.is_dir() and (candidate / "index.html").exists():
-            return str(candidate)
-    return str(cwd / "console" / "dist")
-
-
-_CONSOLE_STATIC_DIR = _resolve_console_static_dir()
-_CONSOLE_INDEX = (
-    Path(_CONSOLE_STATIC_DIR) / "index.html" if _CONSOLE_STATIC_DIR else None
+# CORS Configuration for SaaS Frontend
+# Allow requests from Vercel deployments and local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://mini-bee.vercel.app",
+        "https://mini-bee-*.vercel.app",  # Preview deployments
+        "http://localhost:5173",  # Local Vite dev
+        "http://localhost:3000",  # Local Next.js dev
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-logger.info(f"STATIC_DIR: {_CONSOLE_STATIC_DIR}")
 
 
 @app.get("/")
 def read_root():
-    if _CONSOLE_INDEX and _CONSOLE_INDEX.exists():
-        return FileResponse(_CONSOLE_INDEX)
-    return {"message": "Hello World"}
+    """Root endpoint - API information."""
+    return {
+        "name": "Mini Bee API",
+        "version": __version__,
+        "status": "running",
+        "description": "Your Personal AI Assistant Backend",
+        "docs": "/docs" if DOCS_ENABLED else None,
+    }
 
 
 @app.get("/api/version")
 def get_version():
-    """Return the current CoPaw version."""
+    """Return the current Mini Bee API version."""
     return {"version": __version__}
 
 
@@ -193,39 +186,3 @@ app.include_router(
     prefix="/api/agent",
     tags=["agent"],
 )
-
-# Mount console: root static files (logo.png etc.) then assets, then SPA
-# fallback.
-if os.path.isdir(_CONSOLE_STATIC_DIR):
-    _console_path = Path(_CONSOLE_STATIC_DIR)
-
-    @app.get("/logo.png")
-    def _console_logo():
-        f = _console_path / "logo.png"
-        if f.is_file():
-            return FileResponse(f, media_type="image/png")
-
-        raise HTTPException(status_code=404, detail="Not Found")
-
-    @app.get("/copaw-symbol.svg")
-    def _console_icon():
-        f = _console_path / "copaw-symbol.svg"
-        if f.is_file():
-            return FileResponse(f, media_type="image/svg+xml")
-
-        raise HTTPException(status_code=404, detail="Not Found")
-
-    _assets_dir = _console_path / "assets"
-    if _assets_dir.is_dir():
-        app.mount(
-            "/assets",
-            StaticFiles(directory=str(_assets_dir)),
-            name="assets",
-        )
-
-    @app.get("/{full_path:path}")
-    def _console_spa(full_path: str):
-        if _CONSOLE_INDEX and _CONSOLE_INDEX.exists():
-            return FileResponse(_CONSOLE_INDEX)
-
-        raise HTTPException(status_code=404, detail="Not Found")
