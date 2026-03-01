@@ -44,21 +44,14 @@ async def chat(
 
     This is the main endpoint for the SaaS frontend to chat with the AI.
     """
-    from agentscope_runtime.engine.schemas.agent_schemas import (
-        AgentRequest,
-        Message,
-        TextContent,
-    )
+    from agentscope.message import Msg
+    from agentscope_runtime.engine.schemas.agent_schemas import AgentRequest
 
     # Generate or use existing session ID
     session_id = request.session_id or str(uuid.uuid4())
 
-    # Build the message
-    user_message = Message(
-        role="user",
-        type="message",
-        content=[TextContent(text=request.message)],
-    )
+    # Build the message using agentscope Msg (which the agent expects)
+    user_message = Msg(name="user", content=request.message, role="user")
 
     # Create agent request with user_id
     agent_request = AgentRequest(
@@ -76,15 +69,19 @@ async def chat(
             msgs=[user_message],
             request=agent_request,
         ):
-            if msg and hasattr(msg, 'content') and msg.content:
-                for content in msg.content:
-                    if hasattr(content, 'text') and content.text:
-                        full_response += content.text
+            if msg:
+                # msg is a Msg object from agentscope
+                if hasattr(msg, 'content') and isinstance(msg.content, str):
+                    full_response += msg.content
+                elif hasattr(msg, 'text'):
+                    full_response += msg.text
 
         if not full_response:
             full_response = "I apologize, but I couldn't generate a response. Please try again."
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         full_response = f"I encountered an error: {str(e)}. Please try again."
 
     return ChatResponse(
@@ -102,19 +99,12 @@ async def chat_stream(
 
     Returns the response as a stream of text chunks.
     """
-    from agentscope_runtime.engine.schemas.agent_schemas import (
-        AgentRequest,
-        Message,
-        TextContent,
-    )
+    from agentscope.message import Msg
+    from agentscope_runtime.engine.schemas.agent_schemas import AgentRequest
 
     session_id = request.session_id or str(uuid.uuid4())
 
-    user_message = Message(
-        role="user",
-        type="message",
-        content=[TextContent(text=request.message)],
-    )
+    user_message = Msg(name="user", content=request.message, role="user")
 
     agent_request = AgentRequest(
         input=[user_message],
@@ -129,10 +119,11 @@ async def chat_stream(
                 msgs=[user_message],
                 request=agent_request,
             ):
-                if msg and hasattr(msg, 'content') and msg.content:
-                    for content in msg.content:
-                        if hasattr(content, 'text') and content.text:
-                            yield content.text
+                if msg:
+                    if hasattr(msg, 'content') and isinstance(msg.content, str):
+                        yield msg.content
+                    elif hasattr(msg, 'text'):
+                        yield msg.text
 
             # Send session ID at the end
             yield f"\n\n---SESSION_ID:{session_id}---"
