@@ -40,60 +40,44 @@ def get_runner(request: Request):
     return runner
 
 
-def extract_text_content(msg) -> str:
-    """Extract text content from a message.
+def extract_final_text(msg) -> str:
+    """Extract the final complete text from a streaming message.
     
-    The agent returns messages in various formats:
-    - Dict with {'type': 'text', 'text': 'content'}
-    - String representation of dict
-    - Msg object with content attribute
+    The agent returns streaming messages in format:
+    {'type': 'text', 'text': 'Hello'}
+    {'type': 'text', 'text': 'Hello!'}
+    {'type': 'text', 'text': 'Hello! How'}
+    ...
+    
+    Each message contains the accumulated text so far.
+    We need to extract the LAST complete text value.
     
     Args:
         msg: Message from agent
         
     Returns:
-        Extracted text content
+        The final complete text content
     """
     if msg is None:
         return ""
     
-    # Convert to string to handle all cases
     msg_str = str(msg)
     
-    # Pattern to match text content in the response
-    # The format is: {'type': 'text', 'text': 'actual text here'}
-    pattern = r"\{'type':\s*'text',\s*'text':\s*'(.*?)'\}"
+    # Pattern to match text content: 'text': 'content'
+    # We want to find ALL occurrences and take the LAST one (most complete)
+    # The pattern captures text between 'text': ' and the closing '
+    # We need to handle multi-line text with escaped characters
     
+    # Find all text values
+    pattern = r"'text':\s*'(.*?)(?='\s*[,}]|\s*$)"
     matches = re.findall(pattern, msg_str, re.DOTALL)
     
     if matches:
         # Get the last match (most complete text)
         text = matches[-1]
-        # Unescape any escaped characters
-        text = text.replace("\\n", "\n").replace("\\'", "'").replace('\\"', '"')
+        # Unescape characters
+        text = text.replace("\\n", "\n").replace("\\'", "'").replace('\\"', '"').replace("\\\\", "\\")
         return text
-    
-    # If no matches, try to extract from dict-like format
-    if "text" in msg_str and "type" in msg_str:
-        try:
-            # Try to parse as JSON (replacing single quotes with double quotes)
-            json_str = msg_str.replace("'", '"')
-            data = json.loads(json_str)
-            if isinstance(data, dict) and data.get("type") == "text":
-                return data.get("text", "")
-        except:
-            pass
-    
-    # Check if it's a Msg object with content
-    if hasattr(msg, 'content'):
-        content = msg.content
-        if isinstance(content, str):
-            # Check if it's a text type message
-            if content.startswith("{'type': 'text'"):
-                match = re.search(r"'text':\s*'(.*?)'\s*\}", content, re.DOTALL)
-                if match:
-                    return match.group(1).replace("\\n", "\n")
-            return content
     
     return ""
 
@@ -115,20 +99,15 @@ async def chat(
         TextContent,
     )
 
-    # Generate or use existing session ID
     session_id = request.session_id or str(uuid.uuid4())
 
-    # Build the message using agentscope Msg (which the agent expects)
     user_msg = Msg(name="user", content=request.message, role="user")
-
-    # Also create a Message for AgentRequest
     user_message = Message(
         role="user",
         type="message",
         content=[TextContent(text=request.message)],
     )
 
-    # Create agent request with user_id
     agent_request = AgentRequest(
         input=[user_message],
         session_id=session_id,
@@ -136,9 +115,7 @@ async def chat(
         stream=False,
     )
 
-    # Process through the agent
-    full_response = ""
-    last_text = ""
+    final_response = ""
 
     try:
         logger.info(f"Starting query handler for session {session_id}")
@@ -146,29 +123,23 @@ async def chat(
             msgs=[user_msg],
             request=agent_request,
         ):
-            if msg is not None:
-                # Extract text from the message
-                text = extract_text_content(msg)
-                if text and len(text) > len(last_text):
-                    # Only update if we got more text (streaming)
-                    last_text = text
+            if msg is not None and last:
+                # Only extract text from the final message
+                final_response = extract_final_text(msg)
 
-        # Use the last extracted text as the full response
-        full_response = last_text
+        logger.info(f"Query handler completed. Response length: {len(final_response)}")
 
-        logger.info(f"Query handler completed. Response length: {len(full_response)}")
-
-        if not full_response.strip():
-            full_response = "I apologize, but I couldn't generate a response. Please try again."
+        if not final_response.strip():
+            final_response = "I apologize, but I couldn't generate a response. Please try again."
 
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
         logger.error(f"Chat error: {e}\n{error_detail}")
-        full_response = f"I encountered an error: {str(e)}. Please try again."
+        final_response = f"I encountered an error: {str(e)}. Please try again."
 
     return ChatResponse(
-        response=full_response,
+        response=final_response,
         session_id=session_id,
     )
 
@@ -215,9 +186,8 @@ async def chat_stream(
                 request=agent_request,
             ):
                 if msg:
-                    text = extract_text_content(msg)
-                    if text and len(text) > len(last_text):
-                        # Yield only the new part
+                    text = extract_final_text(msg)
+                    if len(text) > len(last_text):
                         new_text = text[len(last_text):]
                         yield new_text
                         last_text = text
