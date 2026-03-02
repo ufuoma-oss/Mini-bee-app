@@ -127,7 +127,7 @@ class AgentsConfig(BaseModel):
         default_factory=AgentsRunningConfig,
     )
     language: str = Field(
-        default="zh",
+        default="en",
         description="Language for agent MD files (en/zh)",
     )
     installed_md_files_language: Optional[str] = Field(
