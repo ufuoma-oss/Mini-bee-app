@@ -38,6 +38,58 @@ def get_runner(request: Request):
     return runner
 
 
+def extract_text_from_msg(msg) -> str:
+    """Extract text content from a message, filtering out tool calls and results.
+    
+    Args:
+        msg: Message object from agent
+        
+    Returns:
+        Extracted text content
+    """
+    if msg is None:
+        return ""
+    
+    text_content = ""
+    
+    # If msg has content attribute
+    if hasattr(msg, 'content'):
+        content = msg.content
+        
+        # If content is a string, check if it's a text chunk
+        if isinstance(content, str):
+            # Filter out tool_use and tool_result chunks
+            if content.startswith("{'type': 'tool_"):
+                return ""
+            if content.startswith("{'type': 'text'"):
+                # Extract text from the chunk
+                import re
+                match = re.search(r"'text': '([^']*)'", content)
+                if match:
+                    return match.group(1)
+                return ""
+            return content
+        
+        # If content is a list
+        elif isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict) and item.get('type') == 'text':
+                    text_content += item.get('text', '')
+                elif isinstance(item, str):
+                    text_content += item
+    
+    # If msg has text attribute
+    elif hasattr(msg, 'text'):
+        text_content = msg.text
+    
+    # If msg is a dict with text
+    elif isinstance(msg, dict):
+        if msg.get('type') == 'text':
+            text_content = msg.get('text', '')
+    
+    return text_content
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
@@ -70,9 +122,9 @@ async def chat(
 
     # Create agent request with user_id
     agent_request = AgentRequest(
-        input=[user_message],  # Message for AgentRequest
+        input=[user_message],
         session_id=session_id,
-        user_id="web_user",  # Default user for web frontend
+        user_id="web_user",
         stream=False,
     )
 
@@ -83,39 +135,20 @@ async def chat(
     try:
         logger.info(f"Starting query handler for session {session_id}")
         async for msg, last in runner.query_handler(
-            msgs=[user_msg],  # Msg for agent processing
+            msgs=[user_msg],
             request=agent_request,
         ):
             msg_count += 1
-            logger.debug(f"Received msg #{msg_count}: {type(msg)}, last={last}")
             
             if msg is not None:
-                # Try different ways to extract content
-                content = None
-                
-                # Try msg.content as string
-                if hasattr(msg, 'content'):
-                    if isinstance(msg.content, str):
-                        content = msg.content
-                    elif isinstance(msg.content, list):
-                        # Handle list content
-                        content = " ".join(str(c) for c in msg.content if c)
-                
-                # Try msg.text
-                if not content and hasattr(msg, 'text'):
-                    content = msg.text
-                
-                # Try str(msg)
-                if not content:
-                    content = str(msg) if msg else ""
-                
-                if content:
-                    full_response += content
-                    logger.debug(f"Added content: {content[:100]}...")
+                # Extract text content, filtering out tool calls
+                text = extract_text_from_msg(msg)
+                if text:
+                    full_response += text
 
         logger.info(f"Query handler completed. Total messages: {msg_count}, Response length: {len(full_response)}")
 
-        if not full_response:
+        if not full_response.strip():
             full_response = "I apologize, but I couldn't generate a response. Please try again."
 
     except Exception as e:
@@ -158,7 +191,7 @@ async def chat_stream(
     agent_request = AgentRequest(
         input=[user_message],
         session_id=session_id,
-        user_id="web_user",  # Default user for web frontend
+        user_id="web_user",
         stream=True,
     )
 
@@ -169,12 +202,10 @@ async def chat_stream(
                 request=agent_request,
             ):
                 if msg:
-                    if hasattr(msg, 'content') and isinstance(msg.content, str):
-                        yield msg.content
-                    elif hasattr(msg, 'text'):
-                        yield msg.text
+                    text = extract_text_from_msg(msg)
+                    if text:
+                        yield text
 
-            # Send session ID at the end
             yield f"\n\n---SESSION_ID:{session_id}---"
 
         except Exception as e:
