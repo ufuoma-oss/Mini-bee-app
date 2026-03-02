@@ -2,11 +2,14 @@
 """Chat API for SaaS frontend - Full agent with tools."""
 
 import uuid
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent", tags=["chat"])
 
@@ -75,25 +78,50 @@ async def chat(
 
     # Process through the agent
     full_response = ""
+    msg_count = 0
 
     try:
+        logger.info(f"Starting query handler for session {session_id}")
         async for msg, last in runner.query_handler(
             msgs=[user_msg],  # Msg for agent processing
             request=agent_request,
         ):
-            if msg:
-                # msg is a Msg object from agentscope
-                if hasattr(msg, 'content') and isinstance(msg.content, str):
-                    full_response += msg.content
-                elif hasattr(msg, 'text'):
-                    full_response += msg.text
+            msg_count += 1
+            logger.debug(f"Received msg #{msg_count}: {type(msg)}, last={last}")
+            
+            if msg is not None:
+                # Try different ways to extract content
+                content = None
+                
+                # Try msg.content as string
+                if hasattr(msg, 'content'):
+                    if isinstance(msg.content, str):
+                        content = msg.content
+                    elif isinstance(msg.content, list):
+                        # Handle list content
+                        content = " ".join(str(c) for c in msg.content if c)
+                
+                # Try msg.text
+                if not content and hasattr(msg, 'text'):
+                    content = msg.text
+                
+                # Try str(msg)
+                if not content:
+                    content = str(msg) if msg else ""
+                
+                if content:
+                    full_response += content
+                    logger.debug(f"Added content: {content[:100]}...")
+
+        logger.info(f"Query handler completed. Total messages: {msg_count}, Response length: {len(full_response)}")
 
         if not full_response:
             full_response = "I apologize, but I couldn't generate a response. Please try again."
 
     except Exception as e:
         import traceback
-        traceback.print_exc()
+        error_detail = traceback.format_exc()
+        logger.error(f"Chat error: {e}\n{error_detail}")
         full_response = f"I encountered an error: {str(e)}. Please try again."
 
     return ChatResponse(
