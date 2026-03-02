@@ -266,13 +266,22 @@ def _create_remote_model_instance(
         api_key = llm_cfg.api_key
         base_url = llm_cfg.base_url
     else:
-        logger.warning(
-            "No active LLM configured — "
-            "falling back to DASHSCOPE_API_KEY env var",
-        )
-        model_name = "qwen3-max"
-        api_key = os.getenv("DASHSCOPE_API_KEY", "")
-        base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        # Check for OPENROUTER_API_KEY first (for SaaS deployment)
+        openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
+        if openrouter_api_key:
+            logger.info("Using OPENROUTER_API_KEY from environment")
+            model_name = os.getenv("OPENROUTER_MODEL", "qwen/qwen3-235b-a22b-thinking-2507")
+            api_key = openrouter_api_key
+            base_url = "https://openrouter.ai/api/v1"
+        else:
+            # Fall back to DASHSCOPE_API_KEY
+            logger.warning(
+                "No active LLM configured — "
+                "falling back to DASHSCOPE_API_KEY env var",
+            )
+            model_name = "qwen3-max"
+            api_key = os.getenv("DASHSCOPE_API_KEY", "")
+            base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
     # Instantiate model
     model = chat_model_class(
