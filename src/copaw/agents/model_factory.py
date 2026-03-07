@@ -102,7 +102,7 @@ def _create_model_instance(
         return model, OpenAIChatModel
 
     chat_model_class = _get_chat_model_class_from_provider()
-    model = _create_remote_model_instance(llm_cfg, chat_model_class)
+    model = _create_remote_model_instance(chat_model_class)
     return model, chat_model_class
 
 
@@ -120,27 +120,22 @@ def _get_chat_model_class_from_provider() -> Type[ChatModelBase]:
 
 
 def _create_remote_model_instance(
-    llm_cfg: Optional["ResolvedModelConfig"],
     chat_model_class: Type[ChatModelBase],
 ) -> ChatModelBase:
-    """Create remote model - KIMI ONLY via Baseten."""
+    """Create remote model - KIMI ONLY via Baseten.
     
-    # Get configuration from llm_cfg or environment
-    if llm_cfg and llm_cfg.api_key:
-        model_name = llm_cfg.model or "moonshotai/Kimi-K2.5"
-        api_key = llm_cfg.api_key
-        base_url = llm_cfg.base_url or "https://inference.baseten.co/v1"
-    else:
-        # KIMI via Baseten - the only option
-        api_key = os.getenv("BASETEN_API_KEY", "")
-        model_name = os.getenv("BASETEN_MODEL", "moonshotai/Kimi-K2.5")
-        base_url = "https://inference.baseten.co/v1"
-        
-        if not api_key:
-            raise ValueError(
-                "BASETEN_API_KEY environment variable is required. "
-                "Set it to your Baseten API key."
-            )
+    ALWAYS uses environment variables, ignores any saved config.
+    """
+    # ALWAYS use environment variables - ignore llm_cfg completely
+    api_key = os.getenv("BASETEN_API_KEY", "")
+    model_name = os.getenv("BASETEN_MODEL", "moonshotai/Kimi-K2.5")
+    base_url = "https://inference.baseten.co/v1"
+    
+    if not api_key:
+        raise ValueError(
+            "BASETEN_API_KEY environment variable is required. "
+            "Set it to your Baseten API key."
+        )
 
     logger.info(f"Using Kimi model: {model_name} via Baseten")
 
