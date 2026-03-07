@@ -1,13 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Factory for creating chat models and formatters.
-
-This module provides a unified factory for creating chat model instances
-and their corresponding formatters based on configuration.
-
-Example:
-    >>> from copaw.agents.model_factory import create_model_and_formatter
-    >>> model, formatter = create_model_and_formatter()
-"""
+"""Factory for creating chat models and formatters."""
 
 import logging
 import os
@@ -30,8 +22,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
-# Mapping from chat model class to formatter class
 _CHAT_MODEL_FORMATTER_MAP: dict[Type[ChatModelBase], Type[FormatterBase]] = {
     OpenAIChatModel: OpenAIChatFormatter,
 }
@@ -40,44 +30,15 @@ _CHAT_MODEL_FORMATTER_MAP: dict[Type[ChatModelBase], Type[FormatterBase]] = {
 def _get_formatter_for_chat_model(
     chat_model_class: Type[ChatModelBase],
 ) -> Type[FormatterBase]:
-    """Get the appropriate formatter class for a chat model.
-
-    Args:
-        chat_model_class: The chat model class
-
-    Returns:
-        Corresponding formatter class, defaults to OpenAIChatFormatter
-    """
-    return _CHAT_MODEL_FORMATTER_MAP.get(
-        chat_model_class,
-        OpenAIChatFormatter,
-    )
+    return _CHAT_MODEL_FORMATTER_MAP.get(chat_model_class, OpenAIChatFormatter)
 
 
 def _create_file_block_support_formatter(
     base_formatter_class: Type[FormatterBase],
 ) -> Type[FormatterBase]:
-    """Create a formatter class with file block support.
-
-    This factory function extends any Formatter class to support file blocks
-    in tool results, which are not natively supported by AgentScope.
-
-    Args:
-        base_formatter_class: Base formatter class to extend
-
-    Returns:
-        Enhanced formatter class with file block support
-    """
 
     class FileBlockSupportFormatter(base_formatter_class):
-        """Formatter with file block support for tool results."""
-
         async def _format(self, msgs):
-            """Override to sanitize tool messages before formatting.
-
-            This prevents OpenAI API errors from improperly paired
-            tool messages.
-            """
             msgs = _sanitize_tool_messages(msgs)
             return await super()._format(msgs)
 
@@ -85,165 +46,76 @@ def _create_file_block_support_formatter(
         def convert_tool_result_to_string(
             output: str | list[dict],
         ) -> tuple[str, Sequence[Tuple[str, dict]]]:
-            """Extend parent class to support file blocks.
-
-            Uses try-first strategy for compatibility with parent class.
-
-            Args:
-                output: Tool result output (string or list of blocks)
-
-            Returns:
-                Tuple of (text_representation, multimodal_data)
-            """
             if isinstance(output, str):
                 return output, []
-
-            # Try parent class method first
             try:
-                return base_formatter_class.convert_tool_result_to_string(
-                    output,
-                )
+                return base_formatter_class.convert_tool_result_to_string(output)
             except ValueError as e:
                 if "Unsupported block type: file" not in str(e):
                     raise
-
-                # Handle output containing file blocks
                 textual_output = []
                 multimodal_data = []
-
                 for block in output:
                     if not isinstance(block, dict) or "type" not in block:
-                        raise ValueError(
-                            f"Invalid block: {block}, "
-                            "expected a dict with 'type' key",
-                        ) from e
-
+                        raise ValueError(f"Invalid block: {block}") from e
                     if block["type"] == "file":
-                        file_path = block.get("path", "") or block.get(
-                            "url",
-                            "",
-                        )
+                        file_path = block.get("path", "") or block.get("url", "")
                         file_name = block.get("name", file_path)
-
                         textual_output.append(
-                            f"The returned file '{file_name}' "
-                            f"can be found at: {file_path}",
+                            f"The returned file '{file_name}' can be found at: {file_path}"
                         )
                         multimodal_data.append((file_path, block))
                     else:
-                        # Delegate other block types to parent class
-                        (
-                            text,
-                            data,
-                        ) = base_formatter_class.convert_tool_result_to_string(
-                            [block],
-                        )
+                        text, data = base_formatter_class.convert_tool_result_to_string([block])
                         textual_output.append(text)
                         multimodal_data.extend(data)
-
                 if len(textual_output) == 0:
                     return "", multimodal_data
                 elif len(textual_output) == 1:
                     return textual_output[0], multimodal_data
                 else:
-                    return (
-                        "\n".join("- " + _ for _ in textual_output),
-                        multimodal_data,
-                    )
+                    return "\n".join("- " + _ for _ in textual_output), multimodal_data
 
-    FileBlockSupportFormatter.__name__ = (
-        f"FileBlockSupport{base_formatter_class.__name__}"
-    )
+    FileBlockSupportFormatter.__name__ = f"FileBlockSupport{base_formatter_class.__name__}"
     return FileBlockSupportFormatter
 
 
 def create_model_and_formatter(
     llm_cfg: Optional["ResolvedModelConfig"] = None,
 ) -> Tuple[ChatModelBase, FormatterBase]:
-    """Factory method to create model and formatter instances.
-
-    This method handles both local and remote models, selecting the
-    appropriate chat model class and formatter based on configuration.
-
-    Args:
-        llm_cfg: Resolved model configuration. If None, will call
-            get_active_llm_config() to fetch the active configuration.
-
-    Returns:
-        Tuple of (model_instance, formatter_instance)
-
-    Example:
-        >>> model, formatter = create_model_and_formatter()
-        >>> # Use with custom config
-        >>> from copaw.providers import get_active_llm_config
-        >>> custom_cfg = get_active_llm_config()
-        >>> model, formatter = create_model_and_formatter(custom_cfg)
-    """
-    # Fetch config if not provided
     if llm_cfg is None:
         llm_cfg = get_active_llm_config()
-
-    # Create the model instance and determine chat model class
     model, chat_model_class = _create_model_instance(llm_cfg)
-
-    # Create the formatter based on chat_model_class
     formatter = _create_formatter_instance(chat_model_class)
-
     return model, formatter
 
 
 def _create_model_instance(
     llm_cfg: Optional["ResolvedModelConfig"],
 ) -> Tuple[ChatModelBase, Type[ChatModelBase]]:
-    """Create a chat model instance and determine its class.
-
-    Args:
-        llm_cfg: Resolved model configuration
-
-    Returns:
-        Tuple of (model_instance, chat_model_class)
-    """
-    # Handle local models
     if llm_cfg and llm_cfg.is_local:
         model = create_local_chat_model(
             model_id=llm_cfg.model,
             stream=True,
             generate_kwargs={"max_tokens": None},
         )
-        # Local models use OpenAIChatModel-compatible formatter
         return model, OpenAIChatModel
 
-    # Handle remote models - determine chat_model_class from provider config
     chat_model_class = _get_chat_model_class_from_provider()
-
-    # Create remote model instance with configuration
     model = _create_remote_model_instance(llm_cfg, chat_model_class)
-
     return model, chat_model_class
 
 
 def _get_chat_model_class_from_provider() -> Type[ChatModelBase]:
-    """Get the chat model class from provider configuration.
-
-    Returns:
-        Chat model class, defaults to OpenAIChatModel if not found
-    """
-    chat_model_class = OpenAIChatModel  # default
+    chat_model_class = OpenAIChatModel
     try:
         providers_data = load_providers_json()
         provider_id = providers_data.active_llm.provider_id
         if provider_id:
-            chat_model_name = get_provider_chat_model(
-                provider_id,
-                providers_data,
-            )
+            chat_model_name = get_provider_chat_model(provider_id, providers_data)
             chat_model_class = get_chat_model_class(chat_model_name)
     except Exception as e:
-        logger.debug(
-            "Failed to determine chat model from provider: %s, "
-            "using OpenAIChatModel",
-            e,
-        )
+        logger.debug("Failed to determine chat model from provider: %s", e)
     return chat_model_class
 
 
@@ -251,53 +123,27 @@ def _create_remote_model_instance(
     llm_cfg: Optional["ResolvedModelConfig"],
     chat_model_class: Type[ChatModelBase],
 ) -> ChatModelBase:
-    """Create a remote model instance with configuration.
-
-    Args:
-        llm_cfg: Resolved model configuration
-        chat_model_class: Chat model class to instantiate
-
-    Returns:
-        Configured chat model instance
-    """
-    # Get configuration from llm_cfg or fall back to environment
+    """Create remote model - KIMI ONLY via Baseten."""
+    
+    # Get configuration from llm_cfg or environment
     if llm_cfg and llm_cfg.api_key:
-        model_name = llm_cfg.model or "qwen3-max"
+        model_name = llm_cfg.model or "moonshotai/Kimi-K2.5"
         api_key = llm_cfg.api_key
-        base_url = llm_cfg.base_url
+        base_url = llm_cfg.base_url or "https://inference.baseten.co/v1"
     else:
-        # Check for BASETEN_API_KEY first (recommended for SaaS)
-        baseten_api_key = os.getenv("BASETEN_API_KEY", "")
-        if baseten_api_key:
-            logger.info("Using BASETEN_API_KEY from environment")
-            model_name = os.getenv("BASETEN_MODEL", "moonshotai/Kimi-K2.5")
-            api_key = baseten_api_key
-            base_url = "https://inference.baseten.co/v1"
-        # Check for GEMINI_API_KEY
-        elif os.getenv("GEMINI_API_KEY", ""):
-            gemini_api_key = os.getenv("GEMINI_API_KEY", "")
-            logger.info("Using GEMINI_API_KEY from environment")
-            model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-            api_key = gemini_api_key
-            base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
-        # Check for OPENROUTER_API_KEY
-        elif os.getenv("OPENROUTER_API_KEY", ""):
-            openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
-            logger.info("Using OPENROUTER_API_KEY from environment")
-            model_name = os.getenv("OPENROUTER_MODEL", "qwen/qwen3-235b-a22b-thinking-2507")
-            api_key = openrouter_api_key
-            base_url = "https://openrouter.ai/api/v1"
-        else:
-            # Fall back to DASHSCOPE_API_KEY
-            logger.warning(
-                "No active LLM configured — "
-                "falling back to DASHSCOPE_API_KEY env var",
+        # KIMI via Baseten - the only option
+        api_key = os.getenv("BASETEN_API_KEY", "")
+        model_name = os.getenv("BASETEN_MODEL", "moonshotai/Kimi-K2.5")
+        base_url = "https://inference.baseten.co/v1"
+        
+        if not api_key:
+            raise ValueError(
+                "BASETEN_API_KEY environment variable is required. "
+                "Set it to your Baseten API key."
             )
-            model_name = "qwen3-max"
-            api_key = os.getenv("DASHSCOPE_API_KEY", "")
-            base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
-    # Instantiate model
+    logger.info(f"Using Kimi model: {model_name} via Baseten")
+
     model = chat_model_class(
         model_name,
         api_key=api_key,
@@ -308,27 +154,10 @@ def _create_remote_model_instance(
     return model
 
 
-def _create_formatter_instance(
-    chat_model_class: Type[ChatModelBase],
-) -> FormatterBase:
-    """Create a formatter instance for the given chat model class.
-
-    The formatter is enhanced with file block support for handling
-    file outputs in tool results.
-
-    Args:
-        chat_model_class: The chat model class
-
-    Returns:
-        Formatter instance with file block support
-    """
+def _create_formatter_instance(chat_model_class: Type[ChatModelBase]) -> FormatterBase:
     base_formatter_class = _get_formatter_for_chat_model(chat_model_class)
-    formatter_class = _create_file_block_support_formatter(
-        base_formatter_class,
-    )
+    formatter_class = _create_file_block_support_formatter(base_formatter_class)
     return formatter_class()
 
 
-__all__ = [
-    "create_model_and_formatter",
-]
+__all__ = ["create_model_and_formatter"]
