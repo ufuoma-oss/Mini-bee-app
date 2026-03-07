@@ -266,15 +266,19 @@ def _create_remote_model_instance(
         api_key = llm_cfg.api_key
         base_url = llm_cfg.base_url
     else:
-        # Check for GEMINI_API_KEY first (for SaaS deployment - recommended)
-        gemini_api_key = os.getenv("GEMINI_API_KEY", "")
-        if gemini_api_key:
+        # Check for BASETEN_API_KEY first (recommended for SaaS)
+        baseten_api_key = os.getenv("BASETEN_API_KEY", "")
+        if baseten_api_key:
+            logger.info("Using BASETEN_API_KEY from environment")
+            model_name = os.getenv("BASETEN_MODEL", "moonshotai/Kimi-K2.5")
+            api_key = baseten_api_key
+            base_url = "https://inference.baseten.co/v1"
+        # Check for GEMINI_API_KEY
+        elif os.getenv("GEMINI_API_KEY", ""):
+            gemini_api_key = os.getenv("GEMINI_API_KEY", "")
             logger.info("Using GEMINI_API_KEY from environment")
-            # Gemini 3 Flash - fast and capable
-            # Using OpenAI-compatible endpoint for Gemini
             model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
             api_key = gemini_api_key
-            # Gemini OpenAI-compatible endpoint
             base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
         # Check for OPENROUTER_API_KEY
         elif os.getenv("OPENROUTER_API_KEY", ""):
