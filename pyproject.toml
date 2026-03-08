@@ -19,6 +19,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "onnxruntime<1.24",
     "lark-oapi>=1.5.3",
+    "supabase>=2.0.0",
+    "pyjwt>=2.8.0",
 ]
 
 [tool.setuptools.dynamic]
@@ -29,7 +31,6 @@ packages = { find = { where = ["src"] } }
 include-package-data = true
 
 [tool.setuptools.package-data]
-# Package data for Mini Bee Backend (no console frontend)
 "copaw" = [
     "agents/md_files/**",
     "agents/skills/**",
